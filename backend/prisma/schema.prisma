@@ -1,0 +1,200 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  FAN
+  ORGANIZER
+  SECURITY
+  VOLUNTEER
+  VENDOR
+  MEDICAL
+  ADMIN
+}
+
+enum TicketStatus {
+  PENDING
+  ACTIVE
+  USED
+  EXPIRED
+}
+
+enum OrderStatus {
+  PENDING
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum OrderType {
+  PICKUP
+  DELIVERY
+}
+
+enum EmergencyStatus {
+  PENDING
+  RESPONDING
+  RESOLVED
+}
+
+model User {
+  id               String            @id @default(uuid())
+  email            String?           @unique
+  phone            String?           @unique
+  name             String
+  role             Role              @default(FAN)
+  fanId            String?           @unique // 7-char alphanumeric
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  tickets          Ticket[]
+  orders           FoodOrder[]
+  notifications    Notification[]
+  themeSettings    ThemeSettings?
+  emergencyRequests EmergencyRequest[]
+}
+
+model Stadium {
+  id          String   @id @default(uuid())
+  name        String
+  city        String
+  capacity    Int
+  gates       String[] // List of gates: ["Gate A", "Gate B", etc.]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  matches     Match[]
+}
+
+model Match {
+  id          String      @id @default(uuid())
+  name        String      // e.g. "Argentina vs France"
+  date        String      // e.g. "2026-07-15"
+  time        String      // e.g. "20:00"
+  stadiumId   String
+  stadium     Stadium     @relation(fields: [stadiumId], references: [id])
+  tickets     Ticket[]
+  entrySlots  EntrySlot[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Ticket {
+  id           String       @id @default(uuid())
+  ticketNumber String       @unique
+  matchId      String
+  match        Match        @relation(fields: [matchId], references: [id])
+  userId       String
+  user         User         @relation(fields: [userId], references: [id])
+  seatNumber   String
+  entryGate    String
+  entrySlot    String       // e.g. "19:00 - 19:05"
+  qrCodeToken  String       @unique // Encrypted token
+  status       TicketStatus @default(PENDING)
+  isOffline    Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model EntrySlot {
+  id              String   @id @default(uuid())
+  matchId         String
+  match           Match    @relation(fields: [matchId], references: [id])
+  gate            String
+  slotTime        String   // e.g. "19:00 - 19:05"
+  currentCapacity Int      @default(0)
+  maxCapacity     Int      @default(30)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([matchId, gate, slotTime])
+}
+
+model FoodVendor {
+  id           String      @id @default(uuid())
+  name         String
+  description  String
+  category     String      // e.g. "Burgers", "Beverages"
+  logo         String?
+  queueLength  Int         @default(0)
+  avgPrepTime  Int         @default(5) // in minutes
+  rating       Float       @default(4.5)
+  menuItems    MenuItem[]
+  orders       FoodOrder[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model MenuItem {
+  id              String     @id @default(uuid())
+  vendorId        String
+  vendor          FoodVendor @relation(fields: [vendorId], references: [id])
+  name            String
+  price           Float
+  description     String
+  image           String?
+  isAvailable     Boolean    @default(true)
+  isAIRecommended Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model FoodOrder {
+  id          String      @id @default(uuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id])
+  vendorId    String
+  vendor      FoodVendor  @relation(fields: [vendorId], references: [id])
+  status      OrderStatus @default(PENDING)
+  seatNumber  String
+  type        OrderType   @default(PICKUP)
+  items       Json        // Array of { menuItemId, name, quantity, price }
+  totalAmount Float
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model ThemeSettings {
+  id                     String   @id @default(uuid())
+  userId                 String   @unique
+  user                   User     @relation(fields: [userId], references: [id])
+  backgroundType         String   @default("DYNAMIC") // STATIC, VIDEO, DYNAMIC
+  themeName              String   @default("Cyber Blue") // theme gallery key
+  customWallpaperUrl     String?
+  customVideoUrl         String?
+  blurIntensity          Int      @default(20)
+  brightness             Int      @default(80)
+  opacity                Int      @default(40)
+  glassmorphism          Boolean  @default(true)
+  animatedGradient       Boolean  @default(true)
+  particleEffects        Boolean  @default(true)
+  stadiumLightAnimation  Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model EmergencyRequest {
+  id        String          @id @default(uuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id])
+  location  String          // e.g. "Section A, Row 5, Seat 12"
+  type      String          // e.g. "Medical Request", "Security Alert"
+  status    EmergencyStatus @default(PENDING)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO, WARNING, EMERGENCY
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
